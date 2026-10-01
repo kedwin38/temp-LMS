@@ -235,6 +235,8 @@ class QuizSerializer(serializers.ModelSerializer):
     chapterId = serializers.IntegerField(source='chapter_id', read_only=True)
     isTimed = serializers.BooleanField(source='is_timed', read_only=True)
     timeLimitMinutes = serializers.IntegerField(source='time_limit_minutes', read_only=True)
+    maxAttempts = serializers.IntegerField(source='max_attempts', read_only=True, allow_null=True)
+    attemptsUsed = serializers.SerializerMethodField()
 
     class Meta:
         model = Quiz
@@ -250,7 +252,15 @@ class QuizSerializer(serializers.ModelSerializer):
             'chapterId',
             'isTimed',
             'timeLimitMinutes',
+            'maxAttempts',
+            'attemptsUsed',
         ]
+
+    def get_attemptsUsed(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated or not request.user.is_student():
+            return None
+        return obj.attempts.filter(student=request.user).count()
 
 
 class ChapterSerializer(serializers.ModelSerializer):

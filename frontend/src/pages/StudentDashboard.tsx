@@ -119,7 +119,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                               {material.type === 'PDF' ? <FileText className="w-3.5 h-3.5" /> : <Video className="w-3.5 h-3.5" />}{material.type === 'PDF' ? 'View PDF: ' : 'Watch Video: '}{material.title}
                             </button>
                           ))}
-                          {chapter.quizzes.map((quiz) => <button key={quiz.id} onClick={() => setActiveQuiz({ quiz, courseTitle: course.title })} className="mt-2 mr-2 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-md hover:bg-amber-100"><CheckCircle2 className="w-3.5 h-3.5" />Start Quiz: {quiz.title}</button>)}
+                          {chapter.quizzes.map((quiz) => {
+                            const attemptsExhausted = quiz.maxAttempts != null && (quiz.attemptsUsed ?? 0) >= quiz.maxAttempts;
+                            return (
+                              <button
+                                key={quiz.id}
+                                disabled={attemptsExhausted}
+                                onClick={() => setActiveQuiz({ quiz, courseTitle: course.title })}
+                                title={attemptsExhausted ? `You have used all ${quiz.maxAttempts} allowed attempt(s) for this quiz.` : undefined}
+                                className="mt-2 mr-2 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-md hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                {attemptsExhausted ? 'No attempts remaining: ' : 'Start Quiz: '}{quiz.title}
+                                {quiz.maxAttempts != null && <span className="font-normal text-amber-700">({Math.max(quiz.maxAttempts - (quiz.attemptsUsed ?? 0), 0)} of {quiz.maxAttempts} left)</span>}
+                              </button>
+                            );
+                          })}
                         </div>
                       );
                     })}

@@ -155,6 +155,11 @@ class Quiz(models.Model):
     time_limit_minutes = models.PositiveIntegerField(null=True, blank=True)
     opens_at = models.TimeField(null=True, blank=True)
     closes_at = models.TimeField(null=True, blank=True)
+    max_attempts = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum number of times a student may submit this quiz. Blank means unlimited."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

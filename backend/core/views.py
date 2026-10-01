@@ -287,7 +287,12 @@ class MaterialStreamView(APIView):
         try:
             file_path = material.file.path
         except NotImplementedError:
-            return Response({"detail": "Direct filesystem streaming not supported on this storage backend."}, status=status.HTTP_400_BAD_REQUEST)
+            # Remote object storage (e.g. S3/R2) has no local filesystem path.
+            # Redirect to a signed, time-limited URL so the browser streams
+            # (and range-requests, for video scrubbing) directly from the
+            # object store instead of proxying bytes through Django.
+            from django.http import HttpResponseRedirect
+            return HttpResponseRedirect(material.file.url)
 
         content_type = mimetypes.guess_type(material.file.name)[0] or ('video/mp4' if material.material_type == LearningMaterial.MaterialType.VIDEO else 'application/pdf')
         response = stream_video_file(request, file_path, content_type=content_type)
@@ -322,14 +327,31 @@ class QuizCreateView(APIView):
 
         title = request.data.get('title', '').strip()
         instructions = request.data.get('instructions', '')
-        passing_score = int(request.data.get('passingScorePercent', 70))
+        try:
+            passing_score = int(request.data.get('passingScorePercent', 70))
+        except (TypeError, ValueError):
+            return Response({'passingScorePercent': ['Passing score must be a whole number.']}, status=status.HTTP_400_BAD_REQUEST)
         results_visible = str(request.data.get('resultsVisibleToStudents', '')).lower() == 'true'
         is_timed = str(request.data.get('isTimed', '')).lower() == 'true'
         time_limit_minutes = request.data.get('timeLimitMinutes')
         opens_at_raw = request.data.get('opensAt') or None
         closes_at_raw = request.data.get('closesAt') or None
-        if is_timed and (not time_limit_minutes or int(time_limit_minutes) < 1):
-            return Response({'timeLimitMinutes': ['A positive time limit is required for timed quizzes.']}, status=status.HTTP_400_BAD_REQUEST)
+        max_attempts_raw = request.data.get('maxAttempts')
+        max_attempts = None
+        if max_attempts_raw not in (None, ''):
+            try:
+                max_attempts = int(max_attempts_raw)
+            except (TypeError, ValueError):
+                return Response({'maxAttempts': ['Max attempts must be a whole number.']}, status=status.HTTP_400_BAD_REQUEST)
+            if max_attempts < 1:
+                return Response({'maxAttempts': ['Max attempts must be at least 1, or left blank for unlimited.']}, status=status.HTTP_400_BAD_REQUEST)
+        if is_timed:
+            try:
+                time_limit_valid = time_limit_minutes and int(time_limit_minutes) >= 1
+            except (TypeError, ValueError):
+                return Response({'timeLimitMinutes': ['Time limit must be a whole number.']}, status=status.HTTP_400_BAD_REQUEST)
+            if not time_limit_valid:
+                return Response({'timeLimitMinutes': ['A positive time limit is required for timed quizzes.']}, status=status.HTTP_400_BAD_REQUEST)
         if bool(opens_at_raw) != bool(closes_at_raw):
             return Response({'detail': 'Both opening and closing times are required for a quiz time window.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -342,7 +364,12 @@ class QuizCreateView(APIView):
         questions_data = request.data.get('questions', [])
         if isinstance(questions_data, str):
             import json
-            questions_data = json.loads(questions_data)
+            try:
+                questions_data = json.loads(questions_data)
+            except json.JSONDecodeError:
+                return Response({'questions': ['Questions payload must be valid JSON.']}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(questions_data, list):
+            return Response({'questions': ['Questions payload must be a list.']}, status=status.HTTP_400_BAD_REQUEST)
         chapter = None
         chapter_id = request.data.get('chapterId')
         if chapter_id:
@@ -365,6 +392,7 @@ class QuizCreateView(APIView):
                 time_limit_minutes=int(time_limit_minutes) if is_timed else None,
                 opens_at=opens_at,
                 closes_at=closes_at,
+                max_attempts=max_attempts,
             )
 
             for idx, q_data in enumerate(questions_data, start=1):
@@ -412,6 +440,14 @@ class QuizSubmitView(APIView):
         if request.user.academic_level not in quiz.course.level_values:
             return Response({'detail': 'You do not have access to this chapter.'}, status=status.HTTP_403_FORBIDDEN)
 
+        if quiz.max_attempts is not None:
+            previous_attempts = QuizAttempt.objects.filter(student=request.user, quiz=quiz).count()
+            if previous_attempts >= quiz.max_attempts:
+                return Response(
+                    {'detail': f'You have used all {quiz.max_attempts} allowed attempt(s) for this quiz.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
         now = timezone.localtime().time()
         if quiz.opens_at and quiz.closes_at:
             within_window = quiz.opens_at <= now < quiz.closes_at if quiz.opens_at < quiz.closes_at else now >= quiz.opens_at or now < quiz.closes_at
@@ -421,7 +457,12 @@ class QuizSubmitView(APIView):
         answers = request.data.get('answers', {})  # Dict: { str(question_id): choice_id or typed answer }
         if isinstance(answers, str):
             import json
-            answers = json.loads(answers)
+            try:
+                answers = json.loads(answers)
+            except json.JSONDecodeError:
+                return Response({'answers': ['Answers payload must be valid JSON.']}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(answers, dict):
+            return Response({'answers': ['Answers payload must be an object mapping question IDs to choice IDs.']}, status=status.HTTP_400_BAD_REQUEST)
         total_questions = quiz.questions.count()
         correct_count = 0
 
@@ -465,7 +506,7 @@ class QuizSubmitView(APIView):
             'resultAvailable': quiz.results_visible_to_students and not has_document_questions,
             'completedAt': attempt.completed_at.strftime('%Y-%m-%d %H:%M'),
         }
-        if quiz.results_visible_to_students:
+        if quiz.results_visible_to_students and attempt.percentage is not None:
             response_data.update({
                 'score': attempt.score,
                 'totalQuestions': total_questions,

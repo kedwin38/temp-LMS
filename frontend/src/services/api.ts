@@ -239,6 +239,7 @@ export const api = {
     resultsVisibleToStudents = false,
     opensAt: string | null = null,
     closesAt: string | null = null,
+    maxAttempts?: number | null,
   ): Promise<Quiz> => {
     const formData = new FormData();
     formData.append('title', title.trim());
@@ -248,6 +249,7 @@ export const api = {
     formData.append('resultsVisibleToStudents', String(resultsVisibleToStudents));
     if (opensAt) formData.append('opensAt', opensAt);
     if (closesAt) formData.append('closesAt', closesAt);
+    if (maxAttempts) formData.append('maxAttempts', String(maxAttempts));
     formData.append('questions', JSON.stringify(questions.map((question, index) => {
       if (question.questionFile) formData.append(`questionFile_${index}`, question.questionFile);
       return {

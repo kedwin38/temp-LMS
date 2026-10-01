@@ -64,6 +64,8 @@ export interface Quiz {
   timeLimitMinutes?: number | null;
   opensAt?: string | null;
   closesAt?: string | null;
+  maxAttempts?: number | null;
+  attemptsUsed?: number | null;
 }
 
 export interface Chapter {

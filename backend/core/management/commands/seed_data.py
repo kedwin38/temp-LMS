@@ -71,10 +71,12 @@ class Command(BaseCommand):
                 'last_name': 'Jama',
                 'role': User.Role.STUDENT,
                 'student_id': 'STD-2024-001',
+                'academic_level': User.AcademicLevel.FORM_1,
                 'is_active': True,
             }
         )
         student.set_password('Student2024!')
+        student.academic_level = User.AcademicLevel.FORM_1
         student.save()
         self.stdout.write(self.style.SUCCESS("✓ Student ready (faiza / pass: Student2024!)"))
 
@@ -83,7 +85,8 @@ class Command(BaseCommand):
             title='Somali Script & Functional Adult Literacy',
             instructor=inst1,
             defaults={
-                'description': 'Foundational literacy program focusing on reading fluency, grammar, and official written Somali using the script formalized by Shire Jama Ahmed in 1972.'
+                'description': 'Foundational literacy program focusing on reading fluency, grammar, and official written Somali using the script formalized by Shire Jama Ahmed in 1972.',
+                'academic_levels': [User.AcademicLevel.FORM_1, User.AcademicLevel.FORM_2],
             }
         )
 
@@ -93,7 +96,8 @@ class Command(BaseCommand):
             title='Module 1: Somali Orthography & Phonetics Quiz',
             defaults={
                 'instructions': 'Answer all 3 questions on the official Latin orthography introduced by Shire Jama Ahmed.',
-                'passing_score_percent': 70
+                'passing_score_percent': 70,
+                'max_attempts': 2,
             }
         )
 
@@ -134,7 +138,8 @@ class Command(BaseCommand):
             title='Practical Workplace English & Everyday Numeracy',
             instructor=inst2,
             defaults={
-                'description': 'Essential vocabulary, practical conversational skills, and practical mathematical operations for adults in commerce and modern workplaces.'
+                'description': 'Essential vocabulary, practical conversational skills, and practical mathematical operations for adults in commerce and modern workplaces.',
+                'academic_levels': [User.AcademicLevel.FORM_1, User.AcademicLevel.FORM_2],
             }
         )
 

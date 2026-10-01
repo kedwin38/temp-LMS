@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'storages',
 
     # Core Institutional App
     'core',
@@ -101,19 +102,66 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STORAGES = {
-    'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
-    },
-    'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
-    },
-}
 
+# ----------------------------------------------------------------------
 # Media Storage Architecture
-# Keeps large video binaries outside SQLite and supports local disk / object storage
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# ----------------------------------------------------------------------
+# Local disk (the default) is fine for development, but is EPHEMERAL on most
+# PaaS hosts (e.g. Render) -- uploaded videos/PDFs vanish on redeploy or
+# container restart. Setting AWS_STORAGE_BUCKET_NAME switches uploaded
+# course materials to any S3-compatible object store (AWS S3, Cloudflare R2,
+# Backblaze B2, DigitalOcean Spaces, MinIO, ...) for durable storage.
+AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', '').strip()
+USE_S3_MEDIA_STORAGE = bool(AWS_STORAGE_BUCKET_NAME)
+
+if USE_S3_MEDIA_STORAGE:
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'auto')
+    # Set for S3-compatible providers that aren't AWS itself, e.g.
+    # Cloudflare R2: https://<account_id>.r2.cloudflarestorage.com
+    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL', '').strip() or None
+    # Public CDN/custom domain for serving files (e.g. R2 public bucket domain,
+    # or a CloudFront distribution). Leave unset to use signed, time-limited
+    # URLs generated directly against AWS_S3_ENDPOINT_URL/the AWS endpoint.
+    AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_S3_CUSTOM_DOMAIN', '').strip() or None
+    AWS_DEFAULT_ACL = None
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_QUERYSTRING_AUTH = os.environ.get('AWS_QUERYSTRING_AUTH', 'True').lower() == 'true'
+    AWS_QUERYSTRING_EXPIRE = int(os.environ.get('AWS_QUERYSTRING_EXPIRE', 3600))
+
+    STORAGES = {
+        'default': {
+            'BACKEND': 'storages.backends.s3.S3Storage',
+            'OPTIONS': {'location': 'media'},
+        },
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        },
+    }
+    MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/" if AWS_S3_CUSTOM_DOMAIN else '/media/'
+else:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        },
+    }
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
+
+    if not DEBUG:
+        import warnings
+        warnings.warn(
+            'AWS_STORAGE_BUCKET_NAME is not set: uploaded course materials are being written to local '
+            'disk, which most hosting platforms (e.g. Render) wipe on every redeploy or restart. '
+            'Configure AWS_STORAGE_BUCKET_NAME (plus AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY and, for a '
+            'non-AWS S3-compatible provider like Cloudflare R2, AWS_S3_ENDPOINT_URL) for durable storage '
+            'in production. See DEPLOYMENT.md.',
+            RuntimeWarning,
+        )
 
 # Large file upload handling (streaming chunks without memory exhaustion)
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get('FILE_UPLOAD_MAX_MEMORY_SIZE', 10 * 1024 * 1024))

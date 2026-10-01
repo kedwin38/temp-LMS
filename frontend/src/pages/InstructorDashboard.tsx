@@ -41,6 +41,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [quizOpensAt, setQuizOpensAt] = useState('');
   const [quizClosesAt, setQuizClosesAt] = useState('');
   const [quizResultsVisible, setQuizResultsVisible] = useState(false);
+  const [quizMaxAttempts, setQuizMaxAttempts] = useState('');
   const [quizQuestions, setQuizQuestions] = useState<Array<{ prompt: string; questionType: 'MULTIPLE_CHOICE' | 'DOCUMENT'; questionFile?: File; choices: Array<{ text: string; isCorrect: boolean }> }>>([]);
   const [gradingAttemptId, setGradingAttemptId] = useState<string | null>(null);
   const [gradingScore, setGradingScore] = useState('');
@@ -170,6 +171,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     e.preventDefault();
     if (!selectedCourseForQuiz || !quizChapterId || !quizTitle.trim() || (quizIsTimed && Number(quizTimeLimit) < 1) || (Boolean(quizOpensAt) !== Boolean(quizClosesAt))) return;
     if (quizOpensAt && quizClosesAt && quizOpensAt === quizClosesAt) return;
+    if (quizMaxAttempts.trim() && Number(quizMaxAttempts) < 1) return;
     if (quizQuestions.length === 0 || quizQuestions.some((question) => (
       question.questionType === 'DOCUMENT'
         ? !question.questionFile
@@ -188,7 +190,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         isCorrect: choice.isCorrect,
       })),
     }));
-    const quiz = await api.createQuiz(selectedCourseForQuiz, quizChapterId, quizTitle, quizIsTimed, Number(quizTimeLimit), questions, quizResultsVisible, quizOpensAt || null, quizClosesAt || null);
+    const quiz = await api.createQuiz(selectedCourseForQuiz, quizChapterId, quizTitle, quizIsTimed, Number(quizTimeLimit), questions, quizResultsVisible, quizOpensAt || null, quizClosesAt || null, quizMaxAttempts.trim() ? Number(quizMaxAttempts) : null);
     const updatedChapters = targetCourse.chapters.map((chapter) => chapter.id === quizChapterId ? { ...chapter, quizzes: [...chapter.quizzes, quiz] } : chapter);
     onUpdateCourse({ ...targetCourse, chapters: updatedChapters, quizzes: [...targetCourse.quizzes, quiz] });
     setQuizTitle('');
@@ -197,6 +199,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     setQuizOpensAt('');
     setQuizClosesAt('');
     setQuizResultsVisible(false);
+    setQuizMaxAttempts('');
     setQuizQuestions([]);
     setIsCreatingQuiz(false);
   };
@@ -468,6 +471,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <p className="text-xs text-slate-500">Optional daily availability window. Leave both blank to keep the quiz open all day.</p>
               </>}
               <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={quizResultsVisible} onChange={(e) => setQuizResultsVisible(e.target.checked)} /> Show automatically marked results to students</label>
+              <label className="block text-xs font-semibold text-slate-600">Max attempts per student
+                <input min="1" type="number" value={quizMaxAttempts} onChange={(e) => setQuizMaxAttempts(e.target.value)} placeholder="Leave blank for unlimited" className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+              </label>
               <div className="space-y-3 border-t border-slate-200 pt-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-slate-800">Questions</h4>
