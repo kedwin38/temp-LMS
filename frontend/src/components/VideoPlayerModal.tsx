@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { LearningMaterial } from '../types';
-import { api } from '../services/api';
 import { X, Video, Download, CheckCircle } from 'lucide-react';
 
 interface VideoPlayerModalProps {
@@ -9,27 +8,25 @@ interface VideoPlayerModalProps {
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({ material, onClose }) => {
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState('');
-
-  useEffect(() => {
-    if (!material) return undefined;
-    let objectUrl: string | null = null;
-    setVideoUrl(null);
-    setLoadError('');
-
-    // The course-material endpoint is JWT-protected, so a plain <video src>/<a href>
-    // (no Authorization header) would 401. Fetch with the bearer token and play from a blob.
-    api.fetchAuthenticatedFile(material.fileUrl)
-      .then((blobUrl) => { objectUrl = blobUrl; setVideoUrl(blobUrl); })
-      .catch(() => setLoadError('This video could not be opened. Please ask the instructor to upload it again.'));
-
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
+  // The streaming endpoint needs HTTP Range requests for scrubbing, which only a native
+  // <video src> issues -- pre-fetching the whole file as a blob (as PdfViewerModal does for
+  // one-shot PDFs) defeats that: playback can't start until the entire video has downloaded.
+  // A native <video> tag can't attach an Authorization header either, so the access token is
+  // passed as a query param instead; the backend accepts both (QueryParamJWTAuthentication).
+  const videoUrl = useMemo(() => {
+    if (!material) return null;
+    try {
+      const storedTokens = window.localStorage.getItem('shire-jama-auth-tokens');
+      const accessToken = storedTokens ? JSON.parse(storedTokens).access : null;
+      if (!accessToken) return material.fileUrl;
+      const separator = material.fileUrl.includes('?') ? '&' : '?';
+      return `${material.fileUrl}${separator}token=${encodeURIComponent(accessToken)}`;
+    } catch {
+      return material.fileUrl;
+    }
   }, [material]);
 
-  if (!material) return null;
+  if (!material || !videoUrl) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/95 backdrop-blur-sm flex items-center justify-center">
@@ -49,7 +46,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({ material, on
           </div>
 
           <div className="flex items-center gap-2">
-            {material.allowDownload && videoUrl && <a href={videoUrl} download={material.fileName} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-colors"><Download className="w-3.5 h-3.5" /><span>Download</span></a>}
+            {material.allowDownload && <a href={videoUrl} download={material.fileName} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-colors"><Download className="w-3.5 h-3.5" /><span>Download</span></a>}
             <button
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
@@ -61,21 +58,18 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({ material, on
 
         {/* Video Canvas */}
         <div className="bg-black flex items-center justify-center relative aspect-video w-full">
-          {!videoUrl && !loadError && <p className="text-sm text-slate-400">Opening video...</p>}
-          {loadError && <p className="text-sm font-semibold text-rose-400 px-6 text-center">{loadError}</p>}
-          {videoUrl && (
-            <video
-              src={videoUrl}
-              controls
-              controlsList={material.allowDownload ? undefined : 'nodownload noplaybackrate'}
-              disablePictureInPicture={!material.allowDownload}
-              autoPlay
-              playsInline
-              className="w-full h-full max-h-[60vh] object-contain"
-            >
-              Your browser does not support HTML5 video streaming.
-            </video>
-          )}
+          <video
+            key={videoUrl}
+            src={videoUrl}
+            controls
+            controlsList={material.allowDownload ? undefined : 'nodownload noplaybackrate'}
+            disablePictureInPicture={!material.allowDownload}
+            autoPlay
+            playsInline
+            className="w-full h-full max-h-[60vh] object-contain"
+          >
+            Your browser does not support HTML5 video streaming.
+          </video>
         </div>
 
         {/* Bottom Description */}

@@ -33,6 +33,7 @@ from .serializers import (
     QuizAttemptSerializer,
 )
 from .streaming import stream_video_file, stream_file_field
+from .authentication import QueryParamJWTAuthentication
 
 User = get_user_model()
 
@@ -271,6 +272,10 @@ class MaterialStreamView(APIView):
     allowing instant seeking and scrubbing without high memory consumption.
     """
     permission_classes = [permissions.IsAuthenticated]
+    # A native <video> tag issues its own Range-request GETs and can't attach
+    # an Authorization header, so this view also accepts ?token=<access> --
+    # see QueryParamJWTAuthentication.
+    authentication_classes = [QueryParamJWTAuthentication]
 
     def get(self, request, material_id):
         try:
