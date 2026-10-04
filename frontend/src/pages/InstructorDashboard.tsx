@@ -64,11 +64,20 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
 
   // Question/answer attachment endpoints are JWT-protected, so a plain <a href> navigation
   // (no Authorization header) would 401. Fetch the file with the token and open it as a blob.
+  // The tab is opened synchronously inside the click handler (before the await) so it stays
+  // attached to the user gesture -- opening it only after the fetch resolves gets silently
+  // blocked as a popup by Chrome/Safari.
   const openAuthenticatedFile = async (url: string) => {
+    const newTab = window.open('', '_blank', 'noopener,noreferrer');
     try {
       const blobUrl = await api.fetchAuthenticatedFile(url);
-      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      if (newTab) {
+        newTab.location.href = blobUrl;
+      } else {
+        window.alert('Please allow pop-ups for this site to view the file.');
+      }
     } catch {
+      newTab?.close();
       window.alert('This file could not be opened.');
     }
   };
