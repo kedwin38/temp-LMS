@@ -62,6 +62,17 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const myQuizIds = new Set(myCourses.flatMap((course) => course.quizzes.map((quiz) => String(quiz.id))));
   const instructorAttempts = allAttempts.filter((attempt) => myQuizIds.has(String(attempt.quizId)));
 
+  // Question/answer attachment endpoints are JWT-protected, so a plain <a href> navigation
+  // (no Authorization header) would 401. Fetch the file with the token and open it as a blob.
+  const openAuthenticatedFile = async (url: string) => {
+    try {
+      const blobUrl = await api.fetchAuthenticatedFile(url);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      window.alert('This file could not be opened.');
+    }
+  };
+
   const getAttemptReview = (attempt: QuizAttempt) => {
     if (attempt.answerReview) return attempt.answerReview;
     const quiz = courses.flatMap((course) => course.quizzes).find((item) => item.id === attempt.quizId);
@@ -646,17 +657,17 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                               <div key={review.questionId} className="rounded-lg border border-slate-200 bg-white p-3">
                                 <p className="text-sm font-semibold text-slate-900">{review.question}</p>
                                 {review.questionFile && (
-                                  <a href={review.questionFile} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-xs font-bold text-slate-500 hover:text-slate-700">
+                                  <button type="button" onClick={() => void openAuthenticatedFile(review.questionFile!)} className="mt-1 inline-flex text-xs font-bold text-slate-500 hover:text-slate-700">
                                     View question attachment
-                                  </a>
+                                  </button>
                                 )}
                                 <p className="mt-1 text-xs text-slate-600">
                                   Student answer: <span className="font-semibold">{review.selectedAnswer || 'No answer'}</span>
                                 </p>
                                 {review.answerFile && (
-                                  <a href={review.answerFile} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-bold text-blue-700 hover:text-blue-900">
+                                  <button type="button" onClick={() => void openAuthenticatedFile(review.answerFile!)} className="mt-2 block text-xs font-bold text-blue-700 hover:text-blue-900">
                                     View student answer file
-                                  </a>
+                                  </button>
                                 )}
                                 {review.questionType !== 'DOCUMENT' && (
                                   <>

@@ -124,6 +124,35 @@ const apiRequest = async <T>(path: string, options: RequestInit = {}, allowRefre
   return response.json() as Promise<T>;
 };
 
+// Question/answer attachment endpoints are JWT-protected, so a plain <a>/<img> navigation
+// (which sends no Authorization header) would get a 401. Fetch with the bearer token instead
+// and hand back a local blob URL the browser can open or render directly.
+const fetchAuthenticatedFile = async (url: string, allowRefresh = true): Promise<string> => {
+  const tokens = readTokens();
+  const headers = new Headers();
+  if (tokens?.access) headers.set('Authorization', `Bearer ${tokens.access}`);
+
+  let response = await fetch(url, { headers });
+  if (response.status === 401 && allowRefresh && tokens?.refresh) {
+    const refreshResponse = await fetch(`${apiBaseUrl}/auth/token/refresh/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh: tokens.refresh }),
+    });
+    if (refreshResponse.ok) {
+      const refreshed = await refreshResponse.json() as Partial<ApiTokens>;
+      if (refreshed.access) {
+        saveTokens({ access: refreshed.access, refresh: refreshed.refresh || tokens.refresh });
+        return fetchAuthenticatedFile(url, false);
+      }
+    }
+    window.localStorage.removeItem(tokenStorageKey);
+  }
+  if (!response.ok) throw new Error(`Could not load file (${response.status})`);
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
 const mapAttempt = (attempt: Record<string, any>): QuizAttempt => ({
   id: String(attempt.id),
   quizId: String(attempt.quizId),
@@ -151,6 +180,8 @@ const mapAttempt = (attempt: Record<string, any>): QuizAttempt => ({
 
 export const api = {
   hasSession: () => Boolean(readTokens()?.access || readTokens()?.refresh),
+
+  fetchAuthenticatedFile,
 
   clearTokens: async () => {
     window.localStorage.removeItem(tokenStorageKey);

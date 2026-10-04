@@ -24,6 +24,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
   const [attemptResult, setAttemptResult] = useState<QuizAttempt | null>(null);
   const [secondsLeft, setSecondsLeft] = useState((quiz?.timeLimitMinutes ?? 0) * 60);
   const [submitError, setSubmitError] = useState('');
+  const [questionFileBlobs, setQuestionFileBlobs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!quiz?.isTimed || attemptResult || secondsLeft <= 0) return undefined;
@@ -31,6 +32,30 @@ export const QuizModal: React.FC<QuizModalProps> = ({
     return () => window.clearInterval(timer);
   }, [quiz?.isTimed, quiz?.id, attemptResult, secondsLeft]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Question/answer files are served from auth-protected endpoints (a plain <a>/<img>
+  // navigation carries no Authorization header), so each one is fetched as a blob here.
+  useEffect(() => {
+    if (!quiz) return undefined;
+    const objectUrls: string[] = [];
+    const filesToLoad = quiz.questions.filter((q) => q.questionFileUrl);
+
+    Promise.all(
+      filesToLoad.map(async (q) => {
+        try {
+          const blobUrl = await api.fetchAuthenticatedFile(q.questionFileUrl!);
+          objectUrls.push(blobUrl);
+          setQuestionFileBlobs((prev) => ({ ...prev, [q.id]: blobUrl }));
+        } catch {
+          // leave this question's file unresolved; the UI simply won't show a preview
+        }
+      }),
+    );
+
+    return () => {
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [quiz]);
 
   if (!quiz) return null;
 
@@ -131,14 +156,18 @@ export const QuizModal: React.FC<QuizModalProps> = ({
                       <span>{q.prompt}</span>
                     </p>
                     {q.questionFileUrl && (
-                      q.questionType === 'DOCUMENT' ? (
-                        <a href={q.questionFileUrl} target="_blank" rel="noreferrer" className="ml-8 inline-flex items-center gap-2 text-xs font-bold text-blue-700 hover:text-blue-900">
-                          <FileUp className="w-4 h-4" /> View question file
-                        </a>
+                      questionFileBlobs[q.id] ? (
+                        q.questionType === 'DOCUMENT' ? (
+                          <a href={questionFileBlobs[q.id]} target="_blank" rel="noreferrer" className="ml-8 inline-flex items-center gap-2 text-xs font-bold text-blue-700 hover:text-blue-900">
+                            <FileUp className="w-4 h-4" /> View question file
+                          </a>
+                        ) : (
+                          <div className="ml-8">
+                            <img src={questionFileBlobs[q.id]} alt="" className="max-h-64 rounded-lg border border-slate-200" />
+                          </div>
+                        )
                       ) : (
-                        <div className="ml-8">
-                          <img src={q.questionFileUrl} alt="" className="max-h-64 rounded-lg border border-slate-200" />
-                        </div>
+                        <p className="ml-8 text-xs text-slate-400">Loading attachment...</p>
                       )
                     )}
                     {q.questionType === 'DOCUMENT' ? (
