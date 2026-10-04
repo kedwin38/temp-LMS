@@ -19,13 +19,18 @@ class RangeFileWrapper:
         with open(self.file_path, 'rb') as f:
             f.seek(self.offset)
             remaining = self.length
-            while remaining > 0:
-                read_size = min(self.chunk_size, remaining)
-                data = f.read(read_size)
-                if not data:
-                    break
-                remaining -= len(data)
-                yield data
+            try:
+                while remaining > 0:
+                    read_size = min(self.chunk_size, remaining)
+                    data = f.read(read_size)
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
+            except (BrokenPipeError, ConnectionResetError):
+                # The client (e.g. a <video> tag seeking or aborting a load) closed the
+                # connection before we finished writing -- not a server error.
+                return
 
 
 def stream_video_file(request, file_path, content_type='video/mp4'):
