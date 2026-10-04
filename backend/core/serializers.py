@@ -1,8 +1,11 @@
 from .models import User, QuizAnswerAttachment
 from rest_framework import serializers
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from .models import Chapter, ChapterProgress, Course, LearningMaterial, Quiz, Question, Choice, QuizAttempt
 
 User = get_user_model()
@@ -50,6 +53,13 @@ class AdminCreateInstructorSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("An instructor with this email already exists.")
         return normalized
 
+    def validate_temporaryPassword(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
     def create(self, validated_data):
         full_name = validated_data.pop('fullName').strip()
         password = validated_data.pop('temporaryPassword', 'ShireJama2024!')
@@ -60,22 +70,37 @@ class AdminCreateInstructorSerializer(serializers.ModelSerializer):
         last_name = names[1] if len(names) > 1 else ''
 
         username = validated_data.get('username') or email.split('@')[0]
-        instructor_code = validated_data.get('instructor_code')
-        if not instructor_code:
-            code_num = User.objects.filter(role=User.Role.INSTRUCTOR).count() + 101
-            instructor_code = f"INST-{code_num}"
+        explicit_instructor_code = validated_data.get('instructor_code')
 
-        instructor = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password,
-            first_name=first_name,
-            last_name=last_name,
-            role=User.Role.INSTRUCTOR,
-            instructor_code=instructor_code,
-            is_active=True
-        )
-        return instructor
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            instructor_code = explicit_instructor_code
+            if not instructor_code:
+                code_num = User.objects.filter(role=User.Role.INSTRUCTOR).count() + 101 + attempt
+                instructor_code = f"INST-{code_num}"
+            try:
+                with transaction.atomic():
+                    return User.objects.create_user(
+                        username=username,
+                        email=email,
+                        password=password,
+                        first_name=first_name,
+                        last_name=last_name,
+                        role=User.Role.INSTRUCTOR,
+                        instructor_code=instructor_code,
+                        is_active=True
+                    )
+            except IntegrityError:
+                # A collision on an auto-generated code is a transient race (another
+                # request grabbed the same count-based number first) -- regenerate and
+                # retry. A collision on an explicit code, a username race, or exhausting
+                # all retries is a real conflict: surface it as a clean validation error
+                # instead of a raw 500.
+                if explicit_instructor_code or attempt == max_attempts - 1:
+                    raise serializers.ValidationError(
+                        {'detail': 'Could not provision this instructor account due to a conflicting username or instructor code. Please try again.'}
+                    )
+                continue
 
 
 class AdminCreateStudentSerializer(serializers.ModelSerializer):
@@ -93,30 +118,44 @@ class AdminCreateStudentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("An account with this email already exists.")
         return normalized
 
+    def validate_temporaryPassword(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
     def create(self, validated_data):
         full_name = validated_data.pop('fullName').strip()
         password = validated_data.pop('temporaryPassword')
         email = validated_data['email']
         names = full_name.split(' ', 1)
-        username = email.split('@')[0]
-        base_username = username
-        counter = 1
-        while User.objects.filter(username=username).exists():
-            username = f"{base_username}{counter}"
-            counter += 1
+        base_username = email.split('@')[0]
 
-        student_count = User.objects.filter(role=User.Role.STUDENT).count()
-        return User.objects.create_user(
-            username=username,
-            email=email,
-            password=password,
-            first_name=names[0],
-            last_name=names[1] if len(names) > 1 else '',
-            role=User.Role.STUDENT,
-            student_id=f"STD-{timezone.now().year}-{student_count + 1001}",
-            academic_level=validated_data['academic_level'],
-            is_active=True,
-        )
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            username = base_username if attempt == 0 else f"{base_username}{attempt}"
+            student_count = User.objects.filter(role=User.Role.STUDENT).count()
+            student_id = f"STD-{timezone.now().year}-{student_count + 1001 + attempt}"
+            try:
+                with transaction.atomic():
+                    return User.objects.create_user(
+                        username=username,
+                        email=email,
+                        password=password,
+                        first_name=names[0],
+                        last_name=names[1] if len(names) > 1 else '',
+                        role=User.Role.STUDENT,
+                        student_id=student_id,
+                        academic_level=validated_data['academic_level'],
+                        is_active=True,
+                    )
+            except IntegrityError:
+                if attempt == max_attempts - 1:
+                    raise serializers.ValidationError(
+                        {'detail': 'Could not provision this student account due to a conflicting username or student ID. Please try again.'}
+                    )
+                continue
 
 class AdminUserUpdateSerializer(serializers.ModelSerializer):
     fullName = serializers.CharField(required=False, write_only=True)

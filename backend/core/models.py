@@ -68,7 +68,7 @@ class Course(models.Model):
     description = models.TextField()
     instructor = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='courses',
         limit_choices_to={'role': User.Role.INSTRUCTOR}
     )

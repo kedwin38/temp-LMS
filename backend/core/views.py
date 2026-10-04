@@ -1,9 +1,12 @@
 from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction, IntegrityError
 from datetime import time
 from django.utils import timezone
 import mimetypes
@@ -42,6 +45,9 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Login endpoint. Returns JWT tokens along with institutional role and profile details.
     """
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
     def post(self, request, *args, **kwargs):
         identifier = request.data.get('username', '')
         user = User.objects.filter(username__iexact=identifier).first()
@@ -577,8 +583,29 @@ class ChapterCreateView(APIView):
         title = request.data.get('title', '').strip()
         if not title:
             return Response({'title': ['Chapter title is required.']}, status=status.HTTP_400_BAD_REQUEST)
-        order = request.data.get('order') or (course.chapters.count() + 1)
-        chapter = Chapter.objects.create(course=course, title=title, order=order)
+
+        explicit_order = request.data.get('order')
+        if explicit_order not in (None, ''):
+            try:
+                explicit_order = int(explicit_order)
+            except (TypeError, ValueError):
+                return Response({'order': ['Order must be a whole number.']}, status=status.HTTP_400_BAD_REQUEST)
+            if explicit_order < 1:
+                return Response({'order': ['Order must be at least 1.']}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            explicit_order = None
+
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            order = explicit_order if explicit_order is not None else course.chapters.count() + 1 + attempt
+            try:
+                with transaction.atomic():
+                    chapter = Chapter.objects.create(course=course, title=title, order=order)
+                    break
+            except IntegrityError:
+                if explicit_order is not None or attempt == max_attempts - 1:
+                    return Response({'order': ['That chapter order is already taken for this course.']}, status=status.HTTP_400_BAD_REQUEST)
+                continue
         return Response(ChapterSerializer(chapter, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
@@ -753,6 +780,18 @@ class AdminUserDeleteView(APIView):
         if target_user == request.user or target_user.role == User.Role.ADMIN or target_user.is_superuser:
             return Response({'detail': 'Administrator accounts cannot be deleted here.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if target_user.role == User.Role.INSTRUCTOR:
+            course_count = target_user.courses.count()
+            if course_count:
+                return Response(
+                    {'detail': (
+                        f"Cannot delete this instructor: they still own {course_count} course(s), which would "
+                        "permanently destroy all of that course's chapters, materials, quizzes, and student grades. "
+                        "Deactivate the account instead, or reassign/delete their courses first."
+                    )},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         target_user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -770,11 +809,15 @@ class AdminResetPasswordView(APIView):
             return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
         new_password = request.data.get('newPassword', '').strip()
-        if not new_password or len(new_password) < 6:
+        if not new_password:
             return Response(
-                {"detail": "New password must be at least 6 characters."},
+                {"detail": "A new password is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        try:
+            validate_password(new_password, user=target_user)
+        except DjangoValidationError as exc:
+            return Response({"detail": " ".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
         target_user.set_password(new_password)
         target_user.save()
