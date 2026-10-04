@@ -141,6 +141,7 @@ const mapAttempt = (attempt: Record<string, any>): QuizAttempt => ({
     questionId: String(entry.questionId),
     question: entry.question,
     questionType: entry.questionType,
+    questionFile: entry.questionFile,
     selectedAnswer: entry.selectedAnswer,
     correctAnswer: entry.correctAnswer,
     isCorrect: entry.isCorrect,

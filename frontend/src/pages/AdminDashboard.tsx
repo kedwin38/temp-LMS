@@ -149,6 +149,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const openEditUser = (user: User) => {
+    setOperationError('');
     setSelectedUserForEdit(user);
     setEditFullName(user.fullName);
     setEditUsername(user.username);
@@ -199,14 +200,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => { setOperationError(''); setShowAddModal(true); }}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-lg shadow transition-colors"
         >
           <UserPlus className="w-4 h-4" />
           <span>Provision Teacher</span>
         </button>
         <button
-          onClick={() => setShowAddStudentModal(true)}
+          onClick={() => { setOperationError(''); setShowAddStudentModal(true); }}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-lg shadow transition-colors"
         >
           <UserPlus className="w-4 h-4" />
@@ -219,15 +220,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4">
             <h3 className="text-lg font-bold text-slate-900">Create Student Account</h3>
             <form onSubmit={handleAddStudentSubmit} className="space-y-4">
+              {operationError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{operationError}</p>}
               <input type="text" required value={studentFullName} onChange={(e) => setStudentFullName(e.target.value)} placeholder="Full name" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
               <input type="email" required value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} placeholder="Student email" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
               <select required value={studentAcademicLevel} onChange={(e) => setStudentAcademicLevel(e.target.value as AcademicLevel)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm">
                 <option value="">Select class or form</option>
                 {ACADEMIC_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
               </select>
-              <input type="password" required minLength={6} value={studentPassword} onChange={(e) => setStudentPassword(e.target.value)} placeholder="Temporary password (min. 6 characters)" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+              <input type="password" required minLength={8} value={studentPassword} onChange={(e) => setStudentPassword(e.target.value)} placeholder="Temporary password (min. 8 characters)" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddStudentModal(false)} className="px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
+                <button type="button" onClick={() => { setOperationError(''); setShowAddStudentModal(false); }} className="px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
                 <button type="submit" disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm rounded-md shadow">
                   {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
                   <span>Create Student Account</span>
@@ -295,6 +297,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4">
             <h3 className="text-lg font-bold text-slate-900">Provision Teacher Account</h3>
             <form onSubmit={handleAddInstructorSubmit} className="space-y-4">
+              {operationError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{operationError}</p>}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Full Name & Title</label>
                 <input
@@ -344,7 +347,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setOperationError(''); setShowAddModal(false); }}
                   className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800"
                 >
                   Cancel
@@ -376,13 +379,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             ) : (
               <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+                {operationError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{operationError}</p>}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">New Password</label>
                   <input
                     type="password"
                     required
-                    minLength={6}
-                    placeholder="Enter min 6 characters"
+                    minLength={8}
+                    placeholder="Enter at least 8 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -391,7 +395,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedUserForReset(null)}
+                    onClick={() => { setSelectedUserForReset(null); setOperationError(''); }}
                     className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800"
                   >
                     Cancel
@@ -415,6 +419,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <h3 className="text-lg font-bold text-slate-900">Edit Account Details</h3>
             {editSuccess ? <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-sm">{editSuccess}</div> : (
               <form onSubmit={handleEditUserSubmit} className="space-y-3">
+                {operationError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{operationError}</p>}
                 <input required value={editFullName} onChange={(e) => setEditFullName(e.target.value)} placeholder="Full name" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
                 <input required value={editUsername} onChange={(e) => setEditUsername(e.target.value)} placeholder="Username" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
                 <input required type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="Email" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
@@ -425,7 +430,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </select>
                 </>}
                 {selectedUserForEdit.role === 'INSTRUCTOR' && <input value={editInstructorCode} onChange={(e) => setEditInstructorCode(e.target.value)} placeholder="Instructor code" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />}
-                <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setSelectedUserForEdit(null)} className="px-4 py-2 text-sm text-slate-600">Cancel</button><button type="submit" className="px-4 py-2 bg-emerald-700 text-white font-bold text-sm rounded-md">Save Details</button></div>
+                <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => { setOperationError(''); setSelectedUserForEdit(null); }} className="px-4 py-2 text-sm text-slate-600">Cancel</button><button type="submit" className="px-4 py-2 bg-emerald-700 text-white font-bold text-sm rounded-md">Save Details</button></div>
               </form>
             )}
           </div>
@@ -483,7 +488,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {inst.isActive ? 'Deactivate' : 'Reactivate'}
                     </button>
                     <button
-                      onClick={() => setSelectedUserForReset(inst)}
+                      onClick={() => { setOperationError(''); setSelectedUserForReset(inst); }}
                       className="text-xs font-bold px-2.5 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
                     >
                       <KeyRound className="w-3 h-3" />
@@ -531,7 +536,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <td className="py-3 px-4 text-right">
                     <button onClick={() => openEditUser(std)} className="mr-2 text-xs font-bold px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors inline-flex items-center gap-1"><Pencil className="w-3 h-3" /><span>Edit</span></button>
                     <button
-                      onClick={() => setSelectedUserForReset(std)}
+                      onClick={() => { setOperationError(''); setSelectedUserForReset(std); }}
                       className="text-xs font-bold px-2.5 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
                     >
                       <KeyRound className="w-3 h-3" />

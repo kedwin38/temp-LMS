@@ -72,6 +72,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         questionId: question.id,
         question: question.prompt,
         questionType: question.questionType,
+        questionFile: question.questionFileUrl || null,
         selectedAnswer: selected?.text || null,
         correctAnswer: correct?.text || null,
         isCorrect: Boolean(selected && correct && selected.id === correct.id),
@@ -179,18 +180,13 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     ))) return;
     const targetCourse = courses.find((course) => course.id === selectedCourseForQuiz);
     if (!targetCourse) return;
-    const questions: Question[] = quizQuestions.map((question, questionIndex) => ({
-      id: `question-${Date.now()}-${questionIndex}`,
+    const questionsPayload = quizQuestions.map((question) => ({
       prompt: question.prompt.trim(),
       questionType: question.questionType,
-      questionFileUrl: question.questionFile ? URL.createObjectURL(question.questionFile) : undefined,
-      choices: question.choices.map((choice, choiceIndex): Choice => ({
-        id: `choice-${Date.now()}-${questionIndex}-${choiceIndex}`,
-        text: choice.text.trim(),
-        isCorrect: choice.isCorrect,
-      })),
+      questionFile: question.questionFile,
+      choices: question.choices.map((choice) => ({ text: choice.text.trim(), isCorrect: choice.isCorrect })),
     }));
-    const quiz = await api.createQuiz(selectedCourseForQuiz, quizChapterId, quizTitle, quizIsTimed, Number(quizTimeLimit), questions, quizResultsVisible, quizOpensAt || null, quizClosesAt || null, quizMaxAttempts.trim() ? Number(quizMaxAttempts) : null);
+    const quiz = await api.createQuiz(selectedCourseForQuiz, quizChapterId, quizTitle, quizIsTimed, Number(quizTimeLimit), questionsPayload, quizResultsVisible, quizOpensAt || null, quizClosesAt || null, quizMaxAttempts.trim() ? Number(quizMaxAttempts) : null);
     const updatedChapters = targetCourse.chapters.map((chapter) => chapter.id === quizChapterId ? { ...chapter, quizzes: [...chapter.quizzes, quiz] } : chapter);
     onUpdateCourse({ ...targetCourse, chapters: updatedChapters, quizzes: [...targetCourse.quizzes, quiz] });
     setQuizTitle('');
@@ -489,14 +485,21 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       <input required={question.questionType === 'MULTIPLE_CHOICE'} value={question.prompt} onChange={(e) => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, prompt: e.target.value } : item))} placeholder={question.questionType === 'DOCUMENT' ? 'Instructions for the document question (optional)' : `Question ${questionIndex + 1}`} className="flex-1 px-3 py-2 border border-slate-300 rounded-md text-sm" />
                       <button type="button" onClick={() => setQuizQuestions((current) => current.filter((_, index) => index !== questionIndex))} className="px-2 text-rose-600 text-xs font-bold">Remove</button>
                     </div>
-                    {question.questionType === 'DOCUMENT' ? <input required type="file" accept=".pdf,.doc,.docx,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, questionFile: e.target.files?.[0] } : item))} className="w-full text-xs text-slate-500" /> : question.choices.map((choice, choiceIndex) => (
+                    {question.questionType === 'DOCUMENT' ? <input required type="file" accept=".pdf,.doc,.docx,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, questionFile: e.target.files?.[0] } : item))} className="w-full text-xs text-slate-500" /> : <>
+                      <label className="block text-xs text-slate-500">
+                        Attach an image to this question (optional)
+                        <input type="file" accept="image/*" onChange={(e) => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, questionFile: e.target.files?.[0] } : item))} className="mt-1 block w-full text-xs text-slate-500" />
+                      </label>
+                      {question.questionFile && <p className="text-xs font-semibold text-emerald-700">Attached: {question.questionFile.name}</p>}
+                      {question.choices.map((choice, choiceIndex) => (
                       <div key={choiceIndex} className="flex items-center gap-2 pl-3">
                         <input type="radio" name={`correct-${questionIndex}`} checked={choice.isCorrect} onChange={() => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, choices: item.choices.map((option, optionIndex) => ({ ...option, isCorrect: optionIndex === choiceIndex })) } : item))} title="Correct answer" />
                         <input required value={choice.text} onChange={(e) => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, choices: item.choices.map((option, optionIndex) => optionIndex === choiceIndex ? { ...option, text: e.target.value } : option) } : item))} placeholder={`Option ${choiceIndex + 1}`} className="flex-1 px-3 py-1.5 border border-slate-300 rounded-md text-sm" />
                         {question.choices.length > 2 && <button type="button" onClick={() => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, choices: item.choices.filter((_, optionIndex) => optionIndex !== choiceIndex) } : item))} className="text-xs text-slate-500">Remove</button>}
                       </div>
-                    ))}
-                    {question.questionType === 'MULTIPLE_CHOICE' && <button type="button" onClick={() => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, choices: [...item.choices, { text: '', isCorrect: false }] } : item))} className="ml-3 text-xs font-semibold text-blue-700">Add option</button>}
+                      ))}
+                      <button type="button" onClick={() => setQuizQuestions((current) => current.map((item, index) => index === questionIndex ? { ...item, choices: [...item.choices, { text: '', isCorrect: false }] } : item))} className="ml-3 text-xs font-semibold text-blue-700">Add option</button>
+                    </>}
                   </div>
                 ))}
                 {quizQuestions.length === 0 && <p className="text-xs text-slate-500">Add at least one question. Select the radio button beside the correct option.</p>}
@@ -642,6 +645,11 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             ) : getAttemptReview(a).map((review) => (
                               <div key={review.questionId} className="rounded-lg border border-slate-200 bg-white p-3">
                                 <p className="text-sm font-semibold text-slate-900">{review.question}</p>
+                                {review.questionFile && (
+                                  <a href={review.questionFile} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-xs font-bold text-slate-500 hover:text-slate-700">
+                                    View question attachment
+                                  </a>
+                                )}
                                 <p className="mt-1 text-xs text-slate-600">
                                   Student answer: <span className="font-semibold">{review.selectedAnswer || 'No answer'}</span>
                                 </p>

@@ -32,7 +32,7 @@ from .serializers import (
     QuizSerializer,
     QuizAttemptSerializer,
 )
-from .streaming import stream_video_file
+from .streaming import stream_video_file, stream_file_field
 
 User = get_user_model()
 
@@ -310,6 +310,64 @@ class MaterialStreamView(APIView):
         )
         response['Content-Disposition'] = f"{disposition}; filename=\"{material.file.name.split('/')[-1]}\""
         response['X-Content-Type-Options'] = 'nosniff'
+        return response
+
+
+class QuestionFileStreamView(APIView):
+    """
+    Serves a quiz question's optional attached file -- a document a student
+    must respond to (DOCUMENT questions) or an illustrative image/diagram a
+    teacher optionally attaches to any question. Open to any student who can
+    access the quiz's course, and to the course's instructor or an admin.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, question_id):
+        question = Question.objects.select_related('quiz__course').filter(id=question_id).first()
+        if not question or not question.question_file:
+            return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        course = question.quiz.course
+        user = request.user
+        is_admin = user.role == User.Role.ADMIN or user.is_superuser
+        is_owning_instructor = user.is_instructor() and course.instructor_id == user.id
+        is_eligible_student = user.is_student() and user.academic_level in course.level_values
+        if not (is_admin or is_owning_instructor or is_eligible_student):
+            return Response({"detail": "You do not have access to this file."}, status=status.HTTP_403_FORBIDDEN)
+
+        response = stream_file_field(request, question.question_file)
+        if response is None:
+            return Response({"detail": "Physical file missing on server disk."}, status=status.HTTP_404_NOT_FOUND)
+        return response
+
+
+class QuizAnswerAttachmentStreamView(APIView):
+    """
+    Serves a student's uploaded answer file for a document question. Visible
+    only to the student who submitted it and to the owning instructor/admin
+    who can grade it -- never to other students.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, attachment_id):
+        attachment = QuizAnswerAttachment.objects.select_related(
+            'attempt__student', 'attempt__quiz__course'
+        ).filter(id=attachment_id).first()
+        if not attachment or not attachment.file:
+            return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        attempt = attachment.attempt
+        course = attempt.quiz.course
+        user = request.user
+        is_admin = user.role == User.Role.ADMIN or user.is_superuser
+        is_owning_instructor = user.is_instructor() and course.instructor_id == user.id
+        is_owning_student = user.is_student() and attempt.student_id == user.id
+        if not (is_admin or is_owning_instructor or is_owning_student):
+            return Response({"detail": "You do not have access to this file."}, status=status.HTTP_403_FORBIDDEN)
+
+        response = stream_file_field(request, attachment.file)
+        if response is None:
+            return Response({"detail": "Physical file missing on server disk."}, status=status.HTTP_404_NOT_FOUND)
         return response
 
 

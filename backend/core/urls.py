@@ -9,6 +9,8 @@ from .views import (
     ChapterCreateView,
     ChapterProgressView,
     MaterialStreamView,
+    QuestionFileStreamView,
+    QuizAnswerAttachmentStreamView,
     QuizCreateView,
     QuizSubmitView,
     QuizResultsOverviewView,
@@ -48,6 +50,8 @@ urlpatterns = [
     path('quiz-results/', QuizResultsOverviewView.as_view(), name='quiz_results_overview'),
     path('quiz-attempts/<int:attempt_id>/grade/', QuizAttemptGradeView.as_view(), name='quiz_attempt_grade'),
     path('quizzes/<int:quiz_id>/release-results/', QuizReleaseResultsView.as_view(), name='quiz_release_results'),
+    path('questions/<int:question_id>/file/', QuestionFileStreamView.as_view(), name='question_file_stream'),
+    path('quiz-answers/<int:attachment_id>/file/', QuizAnswerAttachmentStreamView.as_view(), name='quiz_answer_attachment_stream'),
 
     # ------------------------------------------------
     # Institutional Admin Management

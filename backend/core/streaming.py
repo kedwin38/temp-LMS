@@ -1,6 +1,7 @@
+import mimetypes
 import os
 import re
-from django.http import StreamingHttpResponse
+from django.http import HttpResponseRedirect, StreamingHttpResponse
 
 
 class RangeFileWrapper:
@@ -61,4 +62,27 @@ def stream_video_file(request, file_path, content_type='video/mp4'):
         response['Content-Length'] = str(file_size)
 
     response['Accept-Ranges'] = 'bytes'
+    return response
+
+
+def stream_file_field(request, file_field, disposition='inline'):
+    """
+    Serves a Django FileField's contents directly (bypassing the unrouted
+    /media/ URL), the same way MaterialStreamView serves course materials:
+    streams from local disk when available, or redirects to a signed URL
+    when using remote object storage (S3/R2/etc., which has no local path).
+    Returns None if the file is missing entirely.
+    """
+    content_type = mimetypes.guess_type(file_field.name)[0] or 'application/octet-stream'
+    try:
+        file_path = file_field.path
+    except NotImplementedError:
+        return HttpResponseRedirect(file_field.url)
+
+    response = stream_video_file(request, file_path, content_type=content_type)
+    if response is None:
+        return None
+    filename = file_field.name.split('/')[-1]
+    response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+    response['X-Content-Type-Options'] = 'nosniff'
     return response

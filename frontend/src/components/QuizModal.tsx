@@ -131,9 +131,15 @@ export const QuizModal: React.FC<QuizModalProps> = ({
                       <span>{q.prompt}</span>
                     </p>
                     {q.questionFileUrl && (
-                      <a href={q.questionFileUrl} target="_blank" rel="noreferrer" className="ml-8 inline-flex items-center gap-2 text-xs font-bold text-blue-700 hover:text-blue-900">
-                        <FileUp className="w-4 h-4" /> View question file
-                      </a>
+                      q.questionType === 'DOCUMENT' ? (
+                        <a href={q.questionFileUrl} target="_blank" rel="noreferrer" className="ml-8 inline-flex items-center gap-2 text-xs font-bold text-blue-700 hover:text-blue-900">
+                          <FileUp className="w-4 h-4" /> View question file
+                        </a>
+                      ) : (
+                        <div className="ml-8">
+                          <img src={q.questionFileUrl} alt="" className="max-h-64 rounded-lg border border-slate-200" />
+                        </div>
+                      )
                     )}
                     {q.questionType === 'DOCUMENT' ? (
                       <div className="pl-8 space-y-2">

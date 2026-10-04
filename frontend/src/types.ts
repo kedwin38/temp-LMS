@@ -95,6 +95,7 @@ export interface QuizAttempt {
     questionId: string;
     question: string;
     questionType?: 'MULTIPLE_CHOICE' | 'DOCUMENT';
+    questionFile?: string | null;
     selectedAnswer: string | null;
     correctAnswer: string | null;
     isCorrect: boolean;

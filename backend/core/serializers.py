@@ -261,7 +261,7 @@ class QuestionSerializer(serializers.ModelSerializer):
         if not obj.question_file:
             return None
         request = self.context.get('request')
-        url = obj.question_file.url
+        url = reverse('question_file_stream', kwargs={'question_id': obj.id})
         return request.build_absolute_uri(url) if request else url
 
 
@@ -453,12 +453,17 @@ class QuizAttemptSerializer(serializers.ModelSerializer):
             selected_id = str(obj.answers.get(str(question.id), ''))
             selected = next((choice for choice in question.choices.all() if str(choice.id) == selected_id), None)
             correct = next((choice for choice in question.choices.all() if choice.is_correct), None)
-            answer_file = next((attachment.file.url for attachment in obj.answer_attachments.all() if attachment.question_id == question.id), None)
-            if answer_file and request:
-                answer_file = request.build_absolute_uri(answer_file)
-            question_file = question.question_file.url if question.question_file else None
-            if question_file and request:
-                question_file = request.build_absolute_uri(question_file)
+            answer_attachment = next((attachment for attachment in obj.answer_attachments.all() if attachment.question_id == question.id), None)
+            answer_file = None
+            if answer_attachment:
+                answer_file = reverse('quiz_answer_attachment_stream', kwargs={'attachment_id': answer_attachment.id})
+                if request:
+                    answer_file = request.build_absolute_uri(answer_file)
+            question_file = None
+            if question.question_file:
+                question_file = reverse('question_file_stream', kwargs={'question_id': question.id})
+                if request:
+                    question_file = request.build_absolute_uri(question_file)
             review.append({
                 'questionId': question.id,
                 'question': question.prompt,
