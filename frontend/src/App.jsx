@@ -73,6 +73,17 @@ export default function App() {
     setCourses((prev) => prev.filter((c) => c.id !== courseId));
   };
 
+  const handleDeleteMaterial = (courseId, materialId) => {
+    setCourses((prev) => prev.map((c) => (c.id !== courseId ? c : {
+      ...c,
+      materials: c.materials.filter((m) => m.id !== materialId),
+      chapters: c.chapters.map((chapter) => ({
+        ...chapter,
+        materials: chapter.materials.filter((m) => m.id !== materialId),
+      })),
+    })));
+  };
+
   // Admin Actions
   const handleAddInstructor = (newInstructor) => {
     setUsers((prev) => [...prev, newInstructor]);
@@ -166,6 +177,7 @@ export default function App() {
             onCreateCourse={handleCreateCourse}
             onUpdateCourse={handleUpdateCourse}
             onDeleteCourse={handleDeleteCourse}
+            onDeleteMaterial={handleDeleteMaterial}
             allAttempts={attempts}
             onUpdateAttempt={handleUpdateAttempt}
           />

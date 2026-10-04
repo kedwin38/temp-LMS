@@ -266,6 +266,24 @@ class MaterialUploadView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+class MaterialDetailView(APIView):
+    """
+    DELETE: Remove a course material (owner instructor or admin). The underlying
+    file is removed too via the post_delete signal on LearningMaterial.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsInstructorOwnerOrAdmin]
+
+    def delete(self, request, material_id):
+        try:
+            material = LearningMaterial.objects.get(id=material_id)
+        except LearningMaterial.DoesNotExist:
+            return Response({"detail": "Material not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        self.check_object_permissions(request, material)
+        material.delete()
+        return Response({"message": "Material deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+
 class MaterialStreamView(APIView):
     """
     Streams large video lecture files with HTTP 206 Partial Content support,

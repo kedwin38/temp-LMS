@@ -9,6 +9,7 @@ interface InstructorDashboardProps {
   onCreateCourse: (course: Course) => void;
   onUpdateCourse: (course: Course) => void;
   onDeleteCourse: (courseId: string) => void;
+  onDeleteMaterial: (courseId: string, materialId: string) => void;
   allAttempts: QuizAttempt[];
   onUpdateAttempt: (attempt: QuizAttempt) => void;
 }
@@ -19,6 +20,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   onCreateCourse,
   onUpdateCourse,
   onDeleteCourse,
+  onDeleteMaterial,
   allAttempts,
   onUpdateAttempt,
 }) => {
@@ -27,6 +29,29 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [courseDesc, setCourseDesc] = useState('');
   const [courseAcademicLevels, setCourseAcademicLevels] = useState<AcademicLevel[]>([]);
   const [courseError, setCourseError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleDeleteCourseClick = async (courseId: string) => {
+    if (!window.confirm('Delete this course? This removes all its chapters, materials, and quizzes permanently.')) return;
+    try {
+      await api.deleteCourse(courseId);
+      setDeleteError('');
+      onDeleteCourse(courseId);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Could not delete the course.');
+    }
+  };
+
+  const handleDeleteMaterialClick = async (courseId: string, materialId: string) => {
+    if (!window.confirm('Delete this material? Students will no longer be able to access it.')) return;
+    try {
+      await api.deleteMaterial(materialId);
+      setDeleteError('');
+      onDeleteMaterial(courseId, materialId);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Could not delete the material.');
+    }
+  };
   const [selectedCourseForUpload, setSelectedCourseForUpload] = useState<string | null>(null);
   const [isCreatingChapter, setIsCreatingChapter] = useState(false);
   const [selectedCourseForChapter, setSelectedCourseForChapter] = useState<string | null>(null);
@@ -537,6 +562,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           <span>Courses Under Your Instruction</span>
         </h2>
 
+        {deleteError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{deleteError}</p>}
+
         {myCourses.length === 0 ? (
           <div className="p-8 text-center bg-white rounded-xl border border-slate-200">
             <p className="text-slate-500 text-sm">You have not created any courses yet. Click &quot;New Course&quot; to begin.</p>
@@ -548,7 +575,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <div className="flex justify-between items-start">
                   <h3 className="text-lg font-bold text-slate-900 font-serif">{c.title}</h3>
                   <button
-                    onClick={() => onDeleteCourse(c.id)}
+                    onClick={() => void handleDeleteCourseClick(c.id)}
                     className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
                     title="Delete Course"
                   >
@@ -567,8 +594,20 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         <span className="text-xs text-slate-500">{chapter.materials.length} materials &bull; {chapter.quizzes.length} quizzes</span>
                       </div>
                       {chapter.materials.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                          {chapter.materials.map((material) => <span key={material.id} className="text-xs text-slate-600">{material.type}: {material.title}</span>)}
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-2">
+                          {chapter.materials.map((material) => (
+                            <span key={material.id} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                              {material.type}: {material.title}
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteMaterialClick(c.id, material.id)}
+                                className="text-slate-400 hover:text-rose-600 transition-colors"
+                                title="Delete Material"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
                         </div>
                       )}
                     </div>

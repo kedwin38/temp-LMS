@@ -237,6 +237,8 @@ export const api = {
 
   deleteCourse: async (courseId: string) => apiRequest<void>(`/courses/${courseId}/`, { method: 'DELETE' }),
 
+  deleteMaterial: async (materialId: string) => apiRequest<void>(`/materials/${materialId}/`, { method: 'DELETE' }),
+
   uploadMaterial: async (courseId: string, formData: FormData) => {
     const result = await apiRequest<Record<string, any>>(`/courses/${courseId}/materials/`, { method: 'POST', body: formData });
     const file = formData.get('file');
