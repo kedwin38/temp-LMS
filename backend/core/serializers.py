@@ -176,9 +176,20 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
             names = full_name.strip().split(' ', 1)
             instance.first_name = names[0]
             instance.last_name = names[1] if len(names) > 1 else ''
+        # student_id/instructor_code are unique=True, null=True at the DB level.
+        # Multiple NULLs don't collide under a unique constraint, but multiple empty
+        # strings do -- normalize a cleared field to NULL instead of saving ''.
+        for blank_ok_field in ('student_id', 'instructor_code'):
+            if validated_data.get(blank_ok_field) == '':
+                validated_data[blank_ok_field] = None
         for field, value in validated_data.items():
             setattr(instance, field, value)
-        instance.save()
+        try:
+            instance.save()
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {'detail': 'That student ID or instructor code is already in use by another account.'}
+            ) from exc
         return instance
 
     def to_representation(self, instance):

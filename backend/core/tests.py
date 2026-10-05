@@ -269,6 +269,39 @@ class ShireJamaLmsTests(TestCase):
         forbidden_response = self.client.patch(f'/api/admin/users/{self.instructor.id}/', {'fullName': 'Nope'}, format='json')
         self.assertEqual(forbidden_response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_clearing_student_id_on_multiple_students_does_not_crash(self):
+        # student_id/instructor_code are unique=True, null=True. Saving a cleared field
+        # as '' (rather than None) on a second account used to collide with the first
+        # under the unique constraint and crash with an uncaught 500.
+        second_student = User.objects.create_user(
+            username='second_student',
+            email='second.student@example.com',
+            password='Password123!',
+            role=User.Role.STUDENT,
+            student_id='STD-998',
+            academic_level='CLASS_2',
+        )
+        self.client.force_authenticate(user=self.admin)
+
+        first_response = self.client.patch(
+            f'/api/admin/users/{self.student.id}/',
+            {'fullName': 'Test Student', 'username': 'test_student', 'email': 'student@example.com', 'studentId': '', 'academicLevel': 'CLASS_1'},
+            format='json'
+        )
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+
+        second_response = self.client.patch(
+            f'/api/admin/users/{second_student.id}/',
+            {'fullName': 'Second Student', 'username': 'second_student', 'email': 'second.student@example.com', 'studentId': '', 'academicLevel': 'CLASS_2'},
+            format='json'
+        )
+        self.assertEqual(second_response.status_code, status.HTTP_200_OK)
+
+        self.student.refresh_from_db()
+        second_student.refresh_from_db()
+        self.assertIsNone(self.student.student_id)
+        self.assertIsNone(second_student.student_id)
+
     def test_admin_can_delete_instructor_and_student_but_not_admin(self):
         self.client.force_authenticate(user=self.admin)
         instructor_response = self.client.delete(f'/api/admin/users/{self.instructor.id}/delete/')
