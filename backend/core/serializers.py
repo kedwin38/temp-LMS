@@ -1,3 +1,5 @@
+import re
+
 from .models import User, QuizAnswerAttachment
 from rest_framework import serializers
 from django.db import IntegrityError, transaction
@@ -9,6 +11,22 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from .models import Chapter, ChapterProgress, Course, LearningMaterial, Quiz, Question, Choice, QuizAttempt
 
 User = get_user_model()
+
+
+def _next_sequence_number(queryset, field_name, pattern):
+    """
+    Returns 1 + the highest numeric suffix found in `field_name` values matching
+    `pattern` (e.g. INST-104 -> 104), or None if nothing matches. Used instead of
+    a row COUNT so the next generated code doesn't start colliding with codes
+    still in use once any account with a lower-numbered code has been deleted.
+    """
+    highest = 0
+    regex = re.compile(pattern)
+    for value in queryset.exclude(**{f'{field_name}__isnull': True}).values_list(field_name, flat=True):
+        match = regex.fullmatch(value or '')
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return highest + 1 if highest else None
 
 
 # ----------------------------------------------------------------------
@@ -72,12 +90,17 @@ class AdminCreateInstructorSerializer(serializers.ModelSerializer):
         username = validated_data.get('username') or email.split('@')[0]
         explicit_instructor_code = validated_data.get('instructor_code')
 
+        # Based on the highest existing code, not a row COUNT: a COUNT drifts behind
+        # the highest-used number the moment any instructor is deleted, so it starts
+        # colliding with every surviving code above the new (lower) count and burns
+        # through all retry attempts before generating anything free.
+        next_code_num = _next_sequence_number(User.objects.filter(role=User.Role.INSTRUCTOR), 'instructor_code', r'INST-(\d+)') or 101
+
         max_attempts = 10
         for attempt in range(max_attempts):
             instructor_code = explicit_instructor_code
             if not instructor_code:
-                code_num = User.objects.filter(role=User.Role.INSTRUCTOR).count() + 101 + attempt
-                instructor_code = f"INST-{code_num}"
+                instructor_code = f"INST-{next_code_num + attempt}"
             try:
                 with transaction.atomic():
                     return User.objects.create_user(
@@ -132,11 +155,18 @@ class AdminCreateStudentSerializer(serializers.ModelSerializer):
         names = full_name.split(' ', 1)
         base_username = email.split('@')[0]
 
+        year = timezone.now().year
+        # See _next_sequence_number's docstring: based on the highest existing
+        # number for this year, not a row COUNT, so a deleted student doesn't make
+        # the next generated ID start colliding with IDs still in use.
+        next_student_num = _next_sequence_number(
+            User.objects.filter(role=User.Role.STUDENT), 'student_id', rf'STD-{year}-(\d+)'
+        ) or 1001
+
         max_attempts = 10
         for attempt in range(max_attempts):
             username = base_username if attempt == 0 else f"{base_username}{attempt}"
-            student_count = User.objects.filter(role=User.Role.STUDENT).count()
-            student_id = f"STD-{timezone.now().year}-{student_count + 1001 + attempt}"
+            student_id = f"STD-{year}-{next_student_num + attempt}"
             try:
                 with transaction.atomic():
                     return User.objects.create_user(

@@ -316,6 +316,31 @@ class ShireJamaLmsTests(TestCase):
         self.assertEqual(admin_response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue(User.objects.filter(id=self.admin.id).exists())
 
+    def test_provisioning_after_a_deletion_does_not_collide_with_a_surviving_code(self):
+        # Auto-generated codes used to be based on a row COUNT, which drifts behind
+        # the highest code actually in use the moment any account is deleted --
+        # provisioning right after a deletion could then try to reuse a code a
+        # surviving account still holds.
+        self.client.force_authenticate(user=self.admin)
+        self.client.post('/api/admin/instructors/', {
+            'fullName': 'Temp A', 'email': 'tempa@example.com', 'username': 'tempa', 'temporaryPassword': 'Teacher2024!',
+        }, format='json')
+        temp_a = User.objects.get(username='tempa')
+        self.client.post('/api/admin/instructors/', {
+            'fullName': 'Temp B', 'email': 'tempb@example.com', 'username': 'tempb', 'temporaryPassword': 'Teacher2024!',
+        }, format='json')
+        temp_b = User.objects.get(username='tempb')
+
+        self.client.delete(f'/api/admin/users/{temp_a.id}/delete/')
+
+        response = self.client.post('/api/admin/instructors/', {
+            'fullName': 'Temp C', 'email': 'tempc@example.com', 'username': 'tempc', 'temporaryPassword': 'Teacher2024!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        new_code = response.data['instructor']['instructorCode']
+        self.assertNotEqual(new_code, temp_b.instructor_code)
+        self.assertNotEqual(new_code, self.instructor.instructor_code)
+
     def test_quiz_grading(self):
         """Verify objective calculation of quiz submissions and score percentage."""
         # Create course & quiz
