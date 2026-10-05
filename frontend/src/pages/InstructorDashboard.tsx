@@ -93,7 +93,10 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   // attached to the user gesture -- opening it only after the fetch resolves gets silently
   // blocked as a popup by Chrome/Safari.
   const openAuthenticatedFile = async (url: string) => {
-    const newTab = window.open('', '_blank', 'noopener,noreferrer');
+    // No noopener/noreferrer here: both make window.open() return null instead of a
+    // usable handle, which is exactly why this previously opened a blank tab that
+    // never navigated anywhere. We still only ever point it at our own blob: URL.
+    const newTab = window.open('', '_blank');
     try {
       const blobUrl = await api.fetchAuthenticatedFile(url);
       if (newTab) {
