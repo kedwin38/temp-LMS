@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://shire-jama-api.onrender.com/api/:path*"
+      "destination": "https://shire-jama-api-j1x7.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
